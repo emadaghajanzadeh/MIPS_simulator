@@ -278,14 +278,25 @@ bitset<32> signextend (bitset<16> imm)
 bitset<32> branchingAddress (bitset<16> addr)
 {
     string sestring;
-    if (addr[15]==0){
+//    if (addr[15]==0){
         sestring = "00000000000000"+addr.to_string<char,std::string::traits_type,std::string::allocator_type>()+"00";
-    }
-    else{
-        sestring = "11111111111111"+addr.to_string<char,std::string::traits_type,std::string::allocator_type>()+"00";
-    }
+//    }
+//    else{
+//        sestring = "11111111111111"+addr.to_string<char,std::string::traits_type,std::string::allocator_type>()+"00";
+//    }
     return (bitset<32> (sestring));
 
+}
+
+bitset<32> jumpingAddress(bitset<26> addr){
+	string sestring;
+//	if (addr[15]==0){
+        sestring = "000000"+addr.to_string<char,std::string::traits_type,std::string::allocator_type>()+"00";				//it should be coorect
+//    }
+//    else{
+//        sestring = "11111111111111"+addr.to_string<char,std::string::traits_type,std::string::allocator_type>()+"00";
+//    }
+    return (bitset<32> (sestring));
 }
 
 int main()
@@ -309,9 +320,9 @@ int main()
     bool WrtEnable;
 	*/
 
-    bool isBranch , isBeq , isBne ; 
+    bool isBranch , isBeq , isBne , isJump ; 
     bitset<32> bAddr;
-
+    bitset<32> jAddr;
     // define newstate
 
     stateStruct state, newState;
@@ -870,11 +881,23 @@ int main()
 				isBne = true ; 
 				cout<<"BNE in clock : " << cycle-1<<endl;
 			}
+			if(opcode.to_ulong()==2){
+				newState.EX.nop = 1;
+				isJump = true  ;
+				cout<<"JUMP in clock : " << cycle-1<<endl;
+				jAddr = jumpingAddress(bitset<26> (shiftbits(state.ID.Instr, 0))).to_ulong() ;
+				cout<<" jump adress is : " << jAddr<<endl;
+			}
+			cout<<myRF.readRF(bitset<5>(shiftbits(state.ID.Instr, 21))) <<"        "<<myRF.readRF(bitset<5>(shiftbits(state.ID.Instr, 16)))<<endl;
     		if((isBeq && (myRF.readRF(bitset<5>(shiftbits(state.ID.Instr, 21))) == myRF.readRF(bitset<5>(shiftbits(state.ID.Instr, 16))))) ||			//if branch token
-			   (isBne && (myRF.readRF(bitset<5>(shiftbits(state.ID.Instr, 21))) == myRF.readRF(bitset<5>(shiftbits(state.ID.Instr, 16)))))){
+			   (isBne && (myRF.readRF(bitset<5>(shiftbits(state.ID.Instr, 21))) != myRF.readRF(bitset<5>(shiftbits(state.ID.Instr, 16)))))){
     			newState.EX.nop = 1;
+    			cout<<"baddress is : "<<branchingAddress(bitset<16> (shiftbits(state.ID.Instr, 0))).to_ulong()<<endl;
+    			cout<<"regular add is: "<< state.IF.PC.to_ulong();
     			bAddr = branchingAddress(bitset<16> (shiftbits(state.ID.Instr, 0))).to_ulong() + state.IF.PC.to_ulong();		//we are in ID and we sum with IF pc that means it sums with PC+4
+    			
     		}
+    		
 
     		if(opcode.to_ulong() == 0){				//checking for Itype
 				newState.EX.is_I_type = false;				//when not itype - setting write enable to 1
@@ -1000,15 +1023,25 @@ int main()
         /* --------------------- IF stage --------------------- */
     	if(!state.IF.nop){
     		// Fetch the instruction
-    		if(isBranch && (myRF.readRF(bitset<5>(shiftbits(state.ID.Instr, 21))) != myRF.readRF(bitset<5>(shiftbits(state.ID.Instr, 16))))){				//make it correct
+         	if((isBeq && (myRF.readRF(bitset<5>(shiftbits(state.ID.Instr, 21))) == myRF.readRF(bitset<5>(shiftbits(state.ID.Instr, 16))))) ||			//if branch token
+			   (isBne && (myRF.readRF(bitset<5>(shiftbits(state.ID.Instr, 21))) != myRF.readRF(bitset<5>(shiftbits(state.ID.Instr, 16)))))){				//make it correct
     				newState.ID.Instr = state.ID.Instr;
     				newState.IF.PC = bAddr;
-    				newState.ID.nop = 1;											
-    		}else{
+    				newState.ID.nop = 1;
+					isBeq = 0 ; isBranch = 0 ; isBne = 0 ;	
+															
+    		}else if(isJump){
+    				newState.ID.Instr = state.ID.Instr;
+    				newState.IF.PC = jAddr;
+    				newState.ID.nop = 1;
+				    isJump = 0 ; 
+    			
+			}else{
 					newState.IF.nop = 0;											//for next while new state should start from IF
 					newState.ID.nop = 0; 											//sending nop0 - to next cycle
 					newState.ID.Instr = myInsMem.readInstr(state.IF.PC); 			// value of progrm counter(instr) to ID/Rf
 
+					
 				if(newState.ID.Instr.to_string<char,std::string::traits_type,std::string::allocator_type>()=="11111111111111111111111111111111"){		
 					newState.ID.nop = 1;
 					newState.IF.nop = 1;
@@ -1016,6 +1049,8 @@ int main()
 				else{
 					newState.IF.PC = bitset<32> (state.IF.PC.to_ulong() + 4);   	//PC = PC + 4
 				}
+//					newState.IF.PC = bitset<32> (state.IF.PC.to_ulong() + 4);   	//PC = PC + 4
+				
     		}
     	}
 
@@ -1038,4 +1073,3 @@ int main()
 
 	return 0;
 }
-
